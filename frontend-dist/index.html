@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AIOps 智能告警分析平台</title>
+<style>
+  :root {
+    --primary: #1677ff;
+    --primary-bg: #e6f4ff;
+    --success: #52c41a;
+    --success-bg: #f6ffed;
+    --warning: #faad14;
+    --warning-bg: #fffbe6;
+    --danger: #ff4d4f;
+    --danger-bg: #fff2f0;
+    --bg: #f5f5f5;
+    --card-bg: #fff;
+    --text: #333;
+    --text-secondary: #888;
+    --border: #e8e8e8;
+    --shadow: 0 2px 8px rgba(0,0,0,0.08);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; }
+  
+  /* Layout */
+  .layout { display: flex; min-height: 100vh; }
+  .sidebar { width: 220px; background: #001529; color: #fff; flex-shrink: 0; }
+  .sidebar-logo { height: 56px; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: bold; border-bottom: 1px solid rgba(255,255,255,0.1); }
+  .sidebar-menu { list-style: none; padding: 8px; }
+  .sidebar-menu li { padding: 10px 16px; margin: 2px 0; border-radius: 6px; cursor: pointer; transition: background 0.2s; display: flex; align-items: center; gap: 10px; }
+  .sidebar-menu li:hover { background: rgba(255,255,255,0.08); }
+  .sidebar-menu li.active { background: var(--primary); }
+  .sidebar-menu li .icon { font-size: 16px; }
+  
+  .main { flex: 1; display: flex; flex-direction: column; }
+  .header { height: 56px; background: var(--card-bg); border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 24px; justify-content: space-between; }
+  .header h1 { font-size: 16px; font-weight: 500; }
+  .content { padding: 24px; flex: 1; overflow-y: auto; }
+  
+  /* Cards */
+  .stat-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
+  .stat-card { background: var(--card-bg); padding: 20px; border-radius: 8px; box-shadow: var(--shadow); }
+  .stat-card .label { color: var(--text-secondary); font-size: 13px; margin-bottom: 8px; }
+  .stat-card .value { font-size: 28px; font-weight: 600; }
+  .stat-card .value.red { color: var(--danger); }
+  .stat-card .value.green { color: var(--success); }
+  .stat-card .value.orange { color: var(--warning); }
+  
+  .card { background: var(--card-bg); border-radius: 8px; box-shadow: var(--shadow); margin-bottom: 16px; }
+  .card-header { padding: 16px 20px; border-bottom: 1px solid var(--border); font-weight: 500; display: flex; justify-content: space-between; align-items: center; }
+  .card-body { padding: 20px; }
+  
+  /* Tags */
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 500; }
+  .tag-red { background: var(--danger-bg); color: var(--danger); }
+  .tag-green { background: var(--success-bg); color: var(--success); }
+  .tag-orange { background: var(--warning-bg); color: var(--warning); }
+  .tag-blue { background: var(--primary-bg); color: var(--primary); }
+  .tag-gray { background: #f0f0f0; color: #666; }
+  
+  /* Table */
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); font-size: 13px; }
+  th { background: #fafafa; font-weight: 500; white-space: nowrap; }
+  tr { cursor: pointer; transition: background 0.15s; }
+  tr:hover { background: #fafafa; }
+  
+  /* Filters */
+  .filters { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 16px; }
+  .filters select, .filters input { padding: 6px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; outline: none; }
+  .filters select:focus, .filters input:focus { border-color: var(--primary); }
+  
+  /* Pagination */
+  .pagination { display: flex; justify-content: center; align-items: center; gap: 8px; margin-top: 16px; }
+  .pagination button { padding: 6px 12px; border: 1px solid var(--border); border-radius: 6px; background: #fff; cursor: pointer; font-size: 13px; }
+  .pagination button:hover { border-color: var(--primary); color: var(--primary); }
+  .pagination button.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+  .pagination button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .pagination .info { color: var(--text-secondary); font-size: 13px; }
+  
+  /* Detail */
+  .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .detail-item { padding: 8px 0; }
+  .detail-item .label { color: var(--text-secondary); font-size: 12px; }
+  .detail-item .value { font-size: 14px; margin-top: 2px; }
+  
+  .analysis-box { background: var(--primary-bg); border: 1px solid #91caff; padding: 16px; border-radius: 8px; margin-bottom: 12px; }
+  .analysis-box h4 { margin-bottom: 8px; color: var(--primary); }
+  .analysis-box ul { padding-left: 20px; }
+  .analysis-box li { margin: 4px 0; font-size: 14px; }
+  
+  .action-box { background: var(--success-bg); border: 1px solid #b7eb8f; padding: 16px; border-radius: 8px; }
+  .action-box h4 { margin-bottom: 8px; color: var(--success); }
+  
+  /* Loading */
+  .loading { text-align: center; padding: 60px; color: var(--text-secondary); }
+  .spinner { display: inline-block; width: 32px; height: 32px; border: 3px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 12px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  
+  .back-btn { padding: 6px 16px; background: #fff; border: 1px solid var(--border); border-radius: 6px; cursor: pointer; margin-bottom: 16px; font-size: 13px; }
+  .back-btn:hover { border-color: var(--primary); color: var(--primary); }
+  
+  .empty-state { text-align: center; padding: 40px; color: var(--text-secondary); }
+  
+  /* Detail timeline */
+  .timeline { position: relative; padding-left: 20px; }
+  .timeline-item { position: relative; padding: 8px 0 8px 16px; border-left: 2px solid var(--border); }
+  .timeline-item::before { content: ''; position: absolute; left: -6px; top: 12px; width: 10px; height: 10px; border-radius: 50%; background: var(--success); }
+  .timeline-item.error::before { background: var(--danger); }
+  
+  @media (max-width: 768px) {
+    .sidebar { width: 60px; }
+    .sidebar-logo span { display: none; }
+    .sidebar-menu li span.menu-text { display: none; }
+    .stat-cards { grid-template-columns: repeat(2, 1fr); }
+    .detail-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+  <nav class="sidebar">
+    <div class="sidebar-logo"><span>🛠 AIOps</span></div>
+    <ul class="sidebar-menu">
+      <li onclick="navigate('/')" id="nav-dashboard"><span class="icon">📊</span><span class="menu-text">仪表盘</span></li>
+      <li onclick="navigate('/alerts')" id="nav-alerts"><span class="icon">🚨</span><span class="menu-text">告警列表</span></li>
+    </ul>
+  </nav>
+  <div class="main">
+    <header class="header">
+      <h1 id="page-title">仪表盘</h1>
+      <span style="color:#888;font-size:12px">Worker v2.0</span>
+    </header>
+    <div class="content" id="app"></div>
+  </div>
+</div>
+
+<script>
+// ========== Router ==========
+const app = document.getElementById('app');
+const pageTitle = document.getElementById('page-title');
+
+function navigate(path) {
+  window.location.hash = path;
+  router();
+}
+
+function setActiveNav(key) {
+  document.querySelectorAll('.sidebar-menu li').forEach(el => el.classList.remove('active'));
+  const nav = document.getElementById('nav-' + key);
+  if (nav) nav.classList.add('active');
+}
+
+async function router() {
+  const hash = window.location.hash.slice(1) || '/';
+  if (hash === '/' || hash === '') {
+    setActiveNav('dashboard');
+    pageTitle.textContent = '仪表盘';
+    await renderDashboard();
+  } else if (hash.startsWith('/alerts') && !hash.includes('/alerts/')) {
+    setActiveNav('alerts');
+    pageTitle.textContent = '告警列表';
+    await renderAlertList();
+  } else if (hash.match(/^\/alerts\/\d+$/)) {
+    setActiveNav('alerts');
+    const id = hash.split('/').pop();
+    pageTitle.textContent = '告警详情 #' + id;
+    await renderAlertDetail(id);
+  } else {
+    navigate('/');
+  }
+}
+
+window.addEventListener('hashchange', router);
+router();
+
+// ========== API ==========
+async function api(path) {
+  const res = await fetch('/api' + path);
+  if (!res.ok) throw new Error('请求失败');
+  return res.json();
+}
+
+// ========== Utils ==========
+function severityTag(s) {
+  const map = { critical: 'tag-red', warning: 'tag-orange', info: 'tag-blue' };
+  const labels = { critical: '严重', warning: '警告', info: '信息' };
+  return `<span class="tag ${map[s] || 'tag-gray'}">${labels[s] || s}</span>`;
+}
+
+function statusTag(s) {
+  return s === 'firing'
+    ? '<span class="tag tag-red">🔥 触发中</span>'
+    : '<span class="tag tag-green">✅ 已恢复</span>';
+}
+
+function timeFormat(v) {
+  if (!v) return '-';
+  try { return new Date(v).toLocaleString('zh-CN'); } catch { return v; }
+}
+
+// ========== Dashboard ==========
+async function renderDashboard() {
+  app.innerHTML = '<div class="loading"><div class="spinner"></div><p>加载中...</p></div>';
+  try {
+    const [stats, alerts] = await Promise.all([api('/stats'), api('/alerts?page=1&size=5')]);
+    const aList = alerts.alerts || [];
+    app.innerHTML = `
+      <div class="stat-cards">
+        <div class="stat-card"><div class="label">告警总数</div><div class="value">${stats.total_alerts || 0}</div></div>
+        <div class="stat-card"><div class="label">触发中</div><div class="value red">${stats.firing_count || 0}</div></div>
+        <div class="stat-card"><div class="label">已恢复</div><div class="value green">${stats.resolved_count || 0}</div></div>
+        <div class="stat-card"><div class="label">AI 分析数</div><div class="value">${stats.analyzed_count || 0}</div></div>
+        <div class="stat-card"><div class="label">今日告警</div><div class="value">${stats.today_count || 0}</div></div>
+        <div class="stat-card"><div class="label">平均分析耗时</div><div class="value orange">${stats.avg_analysis_ms ? (stats.avg_analysis_ms/1000).toFixed(1)+'s' : '-'}</div></div>
+      </div>
+      
+      <div class="card">
+        <div class="card-header">
+          <span>分类统计</span>
+        </div>
+        <div class="card-body">
+          ${(stats.by_category || []).length ? (stats.by_category || []).map(c => 
+            `<span class="tag tag-blue" style="margin-right:8px;margin-bottom:8px;">${c.category}: ${c.count}</span>`
+          ).join('') : '<span style="color:#888">暂无数据</span>'}
+        </div>
+      </div>
+      
+      <div class="card">
+        <div class="card-header"><span>最近告警</span></div>
+        <div class="card-body">
+          ${aList.length ? `
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>ID</th><th>告警名称</th><th>状态</th><th>等级</th><th>实例</th><th>时间</th><th>操作</th></tr></thead>
+                <tbody>
+                  ${aList.map(a => `
+                    <tr onclick="navigate('/alerts/${a.id}')">
+                      <td>${a.id}</td>
+                      <td>${a.alertname}</td>
+                      <td>${statusTag(a.status)}</td>
+                      <td>${severityTag(a.severity)}</td>
+                      <td>${a.instance || '-'}</td>
+                      <td>${timeFormat(a.created_at)}</td>
+                      <td><a href="javascript:void(0)" onclick="event.stopPropagation();navigate('/alerts/${a.id}')">详情</a></td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          ` : '<div class="empty-state">暂无告警数据</div>'}
+        </div>
+      </div>
+    `;
+  } catch (e) {
+    app.innerHTML = '<div class="empty-state">⚠️ 加载失败：后端服务可能未启动</div>';
+  }
+}
+
+// ========== Alert List ==========
+let alertState = { page: 1, size: 20, status: '', severity: '' };
+
+async function renderAlertList() {
+  app.innerHTML = '<div class="loading"><div class="spinner"></div><p>加载中...</p></div>';
+  try {
+    const params = new URLSearchParams({ page: alertState.page, size: alertState.size });
+    if (alertState.status) params.set('status', alertState.status);
+    if (alertState.severity) params.set('severity', alertState.severity);
+    
+    const data = await api('/alerts?' + params);
+    const alerts = data.alerts || [];
+    
+    app.innerHTML = `
+      <div class="filters">
+        <select id="filter-status" onchange="alertState.status=this.value;alertState.page=1;renderAlertList()">
+          <option value="">全部状态</option>
+          <option value="firing" ${alertState.status==='firing'?'selected':''}>触发中</option>
+          <option value="resolved" ${alertState.status==='resolved'?'selected':''}>已恢复</option>
+        </select>
+        <select id="filter-severity" onchange="alertState.severity=this.value;alertState.page=1;renderAlertList()">
+          <option value="">全部等级</option>
+          <option value="critical" ${alertState.severity==='critical'?'selected':''}>critical</option>
+          <option value="warning" ${alertState.severity==='warning'?'selected':''}>warning</option>
+          <option value="info" ${alertState.severity==='info'?'selected':''}>info</option>
+        </select>
+        <button onclick="renderAlertList()" style="border:1px solid var(--border);background:#fff;padding:6px 12px;border-radius:6px;cursor:pointer;">🔄 刷新</button>
+      </div>
+      
+      <div class="card">
+        <div class="card-body" style="padding:0;">
+          ${alerts.length ? `
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>ID</th><th>告警名称</th><th>状态</th><th>等级</th><th>实例</th><th>任务</th><th>摘要</th><th>开始时间</th><th>记录时间</th><th>操作</th></tr></thead>
+                <tbody>
+                  ${alerts.map(a => `
+                    <tr onclick="navigate('/alerts/${a.id}')">
+                      <td>${a.id}</td>
+                      <td style="font-weight:500">${a.alertname}</td>
+                      <td>${statusTag(a.status)}</td>
+                      <td>${severityTag(a.severity)}</td>
+                      <td>${a.instance || '-'}</td>
+                      <td>${a.job || '-'}</td>
+                      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${a.summary || '-'}</td>
+                      <td>${a.starts_at || '-'}</td>
+                      <td>${timeFormat(a.created_at)}</td>
+                      <td><a href="javascript:void(0)" onclick="event.stopPropagation();navigate('/alerts/${a.id}')">详情</a></td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+            <div class="pagination" style="padding:16px;">
+              <button ${alertState.page<=1?'disabled':''} onclick="alertState.page--;renderAlertList()">上一页</button>
+              <span class="info">第 ${alertState.page} 页 / 共 ${Math.ceil(data.total/alertState.size)} 页 / ${data.total} 条</span>
+              <button ${alertState.page >= Math.ceil(data.total/alertState.size) ? 'disabled' : ''} onclick="alertState.page++;renderAlertList()">下一页</button>
+            </div>
+          ` : '<div class="empty-state">暂无告警数据</div>'}
+        </div>
+      </div>
+    `;
+  } catch (e) {
+    app.innerHTML = '<div class="empty-state">⚠️ 加载失败：后端服务可能未启动</div>';
+  }
+}
+
+// ========== Alert Detail ==========
+async function renderAlertDetail(id) {
+  app.innerHTML = '<div class="loading"><div class="spinner"></div><p>加载中...</p></div>';
+  try {
+    const d = await api('/alerts/' + id);
+    const a = d.alert;
+    const ar = d.analysis;
+    const notifs = d.notifications || [];
+    
+    let rootCauses = [];
+    let actions = [];
+    if (ar && ar.root_causes) {
+      try { rootCauses = JSON.parse(ar.root_causes); } catch {}
+      try { actions = JSON.parse(ar.actions); } catch {}
+    }
+    
+    app.innerHTML = `
+      <button class="back-btn" onclick="navigate('/alerts')">← 返回列表</button>
+      
+      <div class="card">
+        <div class="card-header"><span>基本信息</span></div>
+        <div class="card-body">
+          <div class="detail-grid">
+            <div class="detail-item"><div class="label">告警名称</div><div class="value" style="font-weight:500">${a.alertname}</div></div>
+            <div class="detail-item"><div class="label">状态</div><div class="value">${statusTag(a.status)}</div></div>
+            <div class="detail-item"><div class="label">等级</div><div class="value">${severityTag(a.severity)}</div></div>
+            <div class="detail-item"><div class="label">实例</div><div class="value">${a.instance || '-'}</div></div>
+            <div class="detail-item"><div class="label">任务</div><div class="value">${a.job || '-'}</div></div>
+            <div class="detail-item"><div class="label">开始时间</div><div class="value">${a.starts_at || '-'}</div></div>
+            <div class="detail-item"><div class="label">结束时间</div><div class="value">${(a.ends_at && a.ends_at !== '0001-01-01T00:00:00Z') ? a.ends_at : '（未结束）'}</div></div>
+            <div class="detail-item" style="grid-column:1/-1"><div class="label">摘要</div><div class="value">${a.summary || '-'}</div></div>
+            <div class="detail-item" style="grid-column:1/-1"><div class="label">描述</div><div class="value">${a.description || '-'}</div></div>
+          </div>
+        </div>
+      </div>
+      
+      ${ar ? `
+      <div class="card">
+        <div class="card-header">
+          <span>🤖 AI 根因分析</span>
+          <span class="tag tag-blue">${ar.duration_ms ? (ar.duration_ms/1000).toFixed(1)+'s' : '-'}</span>
+        </div>
+        <div class="card-body">
+          <p style="margin-bottom:8px;"><span class="tag tag-blue">${ar.category}</span> ${severityTag(ar.severity)}</p>
+          <p style="margin-bottom:12px;color:var(--text-secondary);">${ar.summary}</p>
+          
+          <div class="analysis-box">
+            <h4>⚠️ 可能根因</h4>
+            ${rootCauses.length ? '<ul>' + rootCauses.map(rc => `<li>${rc}</li>`).join('') + '</ul>' : '<p style="color:#888">暂未分析</p>'}
+          </div>
+          <div class="action-box">
+            <h4>✅ 建议操作</h4>
+            ${actions.length ? '<ul>' + actions.map(a => `<li>${a}</li>`).join('') + '</ul>' : '<p style="color:#888">暂无建议</p>'}
+          </div>
+        </div>
+      </div>
+      ` : `
+      <div class="card">
+        <div class="card-header"><span>🤖 AI 根因分析</span></div>
+        <div class="card-body empty-state">
+          <p>暂无 AI 分析结果（分析中或已恢复的告警不进行分析）</p>
+        </div>
+      </div>
+      `}
+      
+      <div class="card">
+        <div class="card-header"><span>📤 通知记录</span></div>
+        <div class="card-body">
+          ${notifs.length ? `
+            <div class="timeline">
+              ${notifs.map(n => `
+                <div class="timeline-item ${n.status === 'failed' ? 'error' : ''}">
+                  <span class="tag ${n.status === 'success' ? 'tag-green' : 'tag-red'}">${n.channel}</span>
+                  ${n.status === 'success' ? '发送成功' : `发送失败: ${n.error_msg || '未知错误'}`}
+                  <span style="margin-left:12px;color:var(--text-secondary);font-size:12px;">${timeFormat(n.created_at)}</span>
+                </div>
+              `).join('')}
+            </div>
+          ` : '<div class="empty-state">暂无通知记录</div>'}
+        </div>
+      </div>
+    `;
+  } catch (e) {
+    app.innerHTML = '<div class="empty-state">⚠️ 告警不存在或加载失败</div>';
+  }
+}
+</script>
+</body>
+</html>

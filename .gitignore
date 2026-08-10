@@ -1,0 +1,24 @@
+# 编译产物
+*.exe
+*.exe~
+alert-webhook
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# 操作系统
+.DS_Store
+Thumbs.db
+
+# 日志文件（避免把运行日志推到仓库）
+*.log
+logs/
+
+# 本地配置（含密钥，禁止提交）
+.env
+config.local.yaml
+config.prod.yaml
