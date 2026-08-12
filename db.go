@@ -248,9 +248,11 @@ func getAlertDetail(alertID int64) (AlertDetail, error) {
 		defer notifRows.Close()
 		for notifRows.Next() {
 			var n NotificationRecord
-			if err := notifRows.Scan(&n.ID, &n.AlertID, &n.Channel, &n.Status, &n.ErrorMsg, &n.CreatedAt); err == nil {
-				d.Notifications = append(d.Notifications, n)
+			if err := notifRows.Scan(&n.ID, &n.AlertID, &n.Channel, &n.Status, &n.ErrorMsg, &n.CreatedAt); err != nil {
+				log.Printf("[DB] 扫描通知记录失败: %v", err)
+				continue
 			}
+			d.Notifications = append(d.Notifications, n)
 		}
 	}
 
@@ -260,8 +262,16 @@ func getAlertDetail(alertID int64) (AlertDetail, error) {
 // ========== Analysis CRUD ==========
 
 func insertAnalysis(alertID int64, ar analysisResult, durationMs int64, rawResponse string) (int64, error) {
-	rcJSON, _ := jsonMarshal(ar.RootCauses)
-	actJSON, _ := jsonMarshal(ar.Actions)
+	rcJSON, err := jsonMarshal(ar.RootCauses)
+	if err != nil {
+		log.Printf("[DB] 序列化 root_causes 失败: %v", err)
+		rcJSON = "[]"
+	}
+	actJSON, err := jsonMarshal(ar.Actions)
+	if err != nil {
+		log.Printf("[DB] 序列化 actions 失败: %v", err)
+		actJSON = "[]"
+	}
 
 	result, err := db.Exec(`
 		INSERT INTO analyses (alert_id, category, severity, summary, root_causes, actions, duration_ms, raw_response)
@@ -295,11 +305,21 @@ func getStats() (StatsResponse, error) {
 	if err := db.QueryRow("SELECT COUNT(*) FROM alerts").Scan(&s.TotalAlerts); err != nil {
 		log.Printf("[DB] 查询告警总数失败: %v", err)
 	}
-	db.QueryRow("SELECT COUNT(*) FROM alerts WHERE status = 'firing'").Scan(&s.FiringCount)
-	db.QueryRow("SELECT COUNT(*) FROM alerts WHERE status = 'resolved'").Scan(&s.ResolvedCount)
-	db.QueryRow("SELECT COUNT(*) FROM analyses").Scan(&s.AnalyzedCount)
-	db.QueryRow("SELECT COUNT(*) FROM alerts WHERE DATE(created_at) = CURDATE()").Scan(&s.TodayCount)
-	db.QueryRow("SELECT COALESCE(AVG(duration_ms), 0) FROM analyses").Scan(&s.AvgAnalysisMs)
+	if err := db.QueryRow("SELECT COUNT(*) FROM alerts WHERE status = 'firing'").Scan(&s.FiringCount); err != nil {
+		log.Printf("[DB] 查询活跃告警数失败: %v", err)
+	}
+	if err := db.QueryRow("SELECT COUNT(*) FROM alerts WHERE status = 'resolved'").Scan(&s.ResolvedCount); err != nil {
+		log.Printf("[DB] 查询已恢复告警数失败: %v", err)
+	}
+	if err := db.QueryRow("SELECT COUNT(*) FROM analyses").Scan(&s.AnalyzedCount); err != nil {
+		log.Printf("[DB] 查询分析总数失败: %v", err)
+	}
+	if err := db.QueryRow("SELECT COUNT(*) FROM alerts WHERE DATE(created_at) = CURDATE()").Scan(&s.TodayCount); err != nil {
+		log.Printf("[DB] 查询今日告警数失败: %v", err)
+	}
+	if err := db.QueryRow("SELECT COALESCE(AVG(duration_ms), 0) FROM analyses").Scan(&s.AvgAnalysisMs); err != nil {
+		log.Printf("[DB] 查询平均分析耗时失败: %v", err)
+	}
 
 	// by category
 	catRows, err := db.Query(`SELECT COALESCE(category,'未分类'), COUNT(*) FROM analyses GROUP BY category ORDER BY COUNT(*) DESC LIMIT 10`)
@@ -307,7 +327,10 @@ func getStats() (StatsResponse, error) {
 		defer catRows.Close()
 		for catRows.Next() {
 			var c CategoryCount
-			catRows.Scan(&c.Category, &c.Count)
+			if err := catRows.Scan(&c.Category, &c.Count); err != nil {
+				log.Printf("[DB] 扫描分类统计失败: %v", err)
+				continue
+			}
 			s.ByCategory = append(s.ByCategory, c)
 		}
 	}
@@ -318,7 +341,10 @@ func getStats() (StatsResponse, error) {
 		defer sevRows.Close()
 		for sevRows.Next() {
 			var sc SeverityCount
-			sevRows.Scan(&sc.Severity, &sc.Count)
+			if err := sevRows.Scan(&sc.Severity, &sc.Count); err != nil {
+				log.Printf("[DB] 扫描等级统计失败: %v", err)
+				continue
+			}
 			s.BySeverity = append(s.BySeverity, sc)
 		}
 	}

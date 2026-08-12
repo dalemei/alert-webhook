@@ -149,7 +149,10 @@ func sendWeixinResolved(a alertItem, webhookURL string) (bool, string) {
 	msg := weixinMarkdown{MsgType: "markdown"}
 	msg.Markdown.Content = content
 
-	data, _ := json.Marshal(msg)
+	data, err := json.Marshal(msg)
+	if err != nil {
+		return false, fmt.Sprintf("序列化失败: %v", err)
+	}
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Post(webhookURL, "application/json", bytes.NewReader(data))
 	if err != nil {
